@@ -38,7 +38,7 @@ def rightEnd(n, whois):
     '''
     Правильное окончание слова
     :param n: количество
-    :param whois: bull or cow
+    :param whois: bull or cow or move
     :return: Слово с верным окончание или False
     '''
     dec = n // 10
@@ -49,18 +49,24 @@ def rightEnd(n, whois):
             return "бык"
         if whois == "cow":
             return "корова"
+        if whois == "move":
+            return "ход"
 
     elif 2 <= one <= 4 and dec != 1:  # [2;4], 2[2;4]... 9[2;4]
         if whois == "bull":
             return "быка"
         if whois == "cow":
             return "коровы"
+        if whois == "move":
+            return "хода"
 
     elif (5 <= one <= 9 or one == 0) or dec == 1 or (one == 0 and dec == 0):  # 0, [5;9], 1[0;9], 20, 30... 90
         if whois == "bull":
             return "быков"
         if whois == "cow":
             return "коров"
+        if whois == "move":
+            return "ходов"
 
     return False
 
@@ -98,9 +104,9 @@ def main(m):
     cur = con.cursor()
     res = cur.execute("SELECT * FROM user WHERE id=?", (id,))
     if res.fetchone() is None:
-        cur.execute("INSERT INTO user VALUES(?, ?, ?)", (id, 0, 0))
-    res = cur.execute("SELECT number, action FROM user WHERE id=?", (id,)).fetchone()
-    num, action = res[0], res[1]
+        cur.execute("INSERT INTO user VALUES(?, ?, ?, ?)", (id, 0, 0, 0))
+    res = cur.execute("SELECT number, action, counter FROM user WHERE id=?", (id,)).fetchone()
+    num, action, counter = res[0], res[1], res[2]
 
     if text == "нет, спасибо" and not action:
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -116,7 +122,7 @@ def main(m):
     elif text == "стоп" and action:
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(start_game)
-        cur.execute("UPDATE user SET number=?, action=? WHERE id=?", (0, 0, id))
+        cur.execute("UPDATE user SET number=0, action=0, counter=0 WHERE id=?", (id,))
         bot.send_message(id, "Хорошо, когда захочешь приходи", reply_markup=markup)
 
     # Если ранее уже была игра
@@ -130,9 +136,8 @@ def main(m):
     # Создание новой игры
     elif (text == "поехали" or text == "да, давай") and not action or text == "новая игра":
         num = generate_number()
-        action = True
-        cur.execute("UPDATE user SET number=?, action=? WHERE id=?", (num, action, id))
-        cur.execute("SELECT number FROM user WHERE id=?", (id,))
+        cur.execute("UPDATE user SET number=?, action=1, counter=0 WHERE id=?", (num, id))
+        # cur.execute("SELECT number FROM user WHERE id=?", (id,))
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(stop_game)
         markup.add(new_game)
@@ -146,16 +151,19 @@ def main(m):
 
     # Пользователь угадал
     elif text == str(num) and action:
-        cur.execute("UPDATE user SET number=?, action=? WHERE id=?", (0, 0, id))
+        counter = cur.execute("SELECT counter FROM user WHERE id=?", (id,)).fetchone()
+        cur.execute("UPDATE user SET number=0, action=0, counter=0 WHERE id=?", (id,))
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
         yes_game = telebot.types.KeyboardButton("Да, давай")
         no_game = telebot.types.KeyboardButton("Нет, спасибо")
         markup.add(yes_game)
         markup.add(no_game)
-        bot.send_message(id, "Вы совершенно правы!)\nХотите сыграть ещё раз?", reply_markup=markup)
+        bot.send_message(id, f"Вы совершенно правы, вы справились за {counter[0]+1} {rightEnd(counter[0]+1, 'move')}!)\nХотите сыграть ещё раз?", reply_markup=markup)
 
     # Пользователь угадывает
     elif action and text.isdigit() and len(text) == 4:
+        counter = cur.execute("SELECT counter FROM user WHERE id=?", (id,)).fetchone()[0]
+        cur.execute("UPDATE user SET counter=? WHERE id=?", (counter+1, id))
         string_number = str(num)
         bulls, cows = 0, 0
         for i in range(4):
@@ -172,8 +180,7 @@ def main(m):
         bot.send_message(id, "У тебя нет начатых игр", reply_markup=markup)
 
     else:
-        bot.send_message(id,
-                         "Я тебя не понимаю, сформулируй свой запрос иначе. Если тебе нужна помощь в использовании бота, то напиши /help")
+        bot.send_message(id, "Я тебя не понимаю, сформулируй свой запрос иначе. Если тебе нужна помощь в использовании бота, то напиши /help")
     con.commit()
 
 
